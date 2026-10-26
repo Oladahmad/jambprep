@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 const features = [
   {
@@ -31,17 +32,17 @@ export default function Home() {
     <main className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
         <nav className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
-          <a href="#" className="shrink-0 text-lg font-black tracking-tight sm:text-xl">
+          <Link href="/" className="shrink-0 text-lg font-black tracking-tight sm:text-xl">
             JAMB<span className="text-blue-600">Prep</span>
             <span className="ml-1 hidden text-xs font-medium text-slate-500 sm:inline">
               ASSESSMENT
             </span>
-          </a>
+          </Link>
 
           <div className="hidden items-center gap-6 text-sm font-medium text-slate-600 md:flex">
-            <a href="#practice" className="transition hover:text-blue-600">
+            <Link href="/practice" className="transition hover:text-blue-600">
               Practice
-            </a>
+            </Link>
             <a href="#features" className="transition hover:text-blue-600">
               Features
             </a>
@@ -50,12 +51,12 @@ export default function Home() {
             </a>
           </div>
 
-          <a
-            href="#practice"
+          <Link
+            href="/practice"
             className="shrink-0 rounded-xl bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 sm:px-5"
           >
             Start practising
-          </a>
+          </Link>
         </nav>
       </header>
 
@@ -78,12 +79,12 @@ export default function Home() {
           </p>
 
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-            <a
-              href="#practice"
+            <Link
+              href="/practice"
               className="flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:w-auto"
             >
               Explore practice tests →
-            </a>
+            </Link>
 
             <a
               href="#features"
@@ -122,12 +123,12 @@ export default function Home() {
               Choose a practice test, work through the questions and learn
               from your results.
             </p>
-            <a
-              href="#practice"
+            <Link
+              href="/practice"
               className="mt-4 flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-3 text-center font-semibold text-white transition hover:bg-blue-700"
             >
               Find a practice test
-            </a>
+            </Link>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -160,8 +161,8 @@ export default function Home() {
               Find your next practice test
             </h2>
             <p className="mt-4 text-sm leading-7 text-slate-600 sm:text-base">
-              Search for an assessment or explore the question library as
-              we continue to add more subjects and question banks.
+              Search for an assessment or go directly to the practice
+              examination.
             </p>
           </div>
 
@@ -189,16 +190,19 @@ export default function Home() {
             <h3 className="mt-4 text-lg font-bold sm:text-xl">
               {search.trim()
                 ? `Search for "${search.trim()}"`
-                : "Your practice library starts here"}
+                : "Ready to start practising?"}
             </h3>
             <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base sm:leading-7">
               {search.trim()
-                ? "Your question library will appear here when we connect the uploaded question banks."
-                : "We will connect your question banks here so students can choose assessments and begin practising."}
+                ? "The search feature is not connected to the question banks yet. You can open the practice page to select your subjects."
+                : "Open the examination page to select your subjects and begin your 50-question practice test."}
             </p>
-            <span className="mt-4 inline-block rounded-full bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 sm:text-sm">
-              Question library coming next
-            </span>
+            <Link
+              href="/practice"
+              className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+            >
+              Go to practice examination →
+            </Link>
           </div>
         </div>
       </section>
@@ -258,18 +262,18 @@ export default function Home() {
               Practise, learn from your mistakes and keep moving forward.
             </p>
           </div>
-          <a
-            href="#practice"
+          <Link
+            href="/practice"
             className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-6 py-3 text-center font-semibold text-slate-900 transition hover:bg-blue-50 sm:w-auto"
           >
             Start practising →
-          </a>
+          </Link>
         </div>
       </section>
 
       <footer className="bg-slate-950 px-4 py-6 text-center text-xs leading-6 text-slate-400 sm:text-sm">
         <span>JAMBPrep Assessment.</span>
-        <span className="block sm:inline sm:ml-1">
+        <span className="block sm:ml-1 sm:inline">
           Built for better preparation.
         </span>
       </footer>
