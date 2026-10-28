@@ -28,17 +28,20 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-const { data } = await supabase.auth.getClaims();
-const claims = data?.claims;
-
+    const { data, error } = await supabase.auth.getClaims();
+    
+  const claims = data?.claims;
+  const isLoggedIn = !error && Boolean(claims);
 
   const pathname = request.nextUrl.pathname;
 
   const protectedRoute =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/") ||
     pathname === "/practice" ||
     pathname.startsWith("/practice/");
 
-  if (!claims && protectedRoute) {
+  if (!isLoggedIn && protectedRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
@@ -47,9 +50,14 @@ const claims = data?.claims;
     return NextResponse.redirect(url);
   }
 
-  if (claims && (pathname === "/login" || pathname === "/register")) {
+  if (
+    isLoggedIn &&
+    (pathname === "/" ||
+      pathname === "/login" ||
+      pathname === "/register")
+  ) {
     const url = request.nextUrl.clone();
-    url.pathname = "/practice";
+    url.pathname = "/dashboard";
     url.search = "";
 
     return NextResponse.redirect(url);
@@ -59,5 +67,11 @@ const claims = data?.claims;
 }
 
 export const config = {
-  matcher: ["/practice/:path*", "/login", "/register"],
+  matcher: [
+    "/",
+    "/dashboard/:path*",
+    "/practice/:path*",
+    "/login",
+    "/register",
+  ],
 };

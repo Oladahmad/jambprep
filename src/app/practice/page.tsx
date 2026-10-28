@@ -1,7 +1,10 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { questionBanks, availableSubjects } from "@/data";
 import type { Question } from "@/data/types";
 
@@ -51,29 +54,25 @@ function createExamQuestions(
   selectedSubjects: string[],
   previousQuestions: PracticeQuestion[] = []
 ): PracticeQuestion[] {
-  const englishBank = questionBanks[ENGLISH] ?? [];
-
-  const englishQuestions = shuffleArray(englishBank)
+  const englishQuestions = shuffleArray(questionBanks[ENGLISH] ?? [])
     .slice(0, 20)
     .map((question) => convertQuestion(question, ENGLISH));
 
   const otherQuestions = selectedSubjects
     .filter((subject) => subject !== ENGLISH)
-    .flatMap((subject) => {
-      const bank = questionBanks[subject] ?? [];
-
-      return shuffleArray(bank)
+    .flatMap((subject) =>
+      shuffleArray(questionBanks[subject] ?? [])
         .slice(0, 10)
-        .map((question) => convertQuestion(question, subject));
-    });
+        .map((question) => convertQuestion(question, subject))
+    );
 
   let exam = shuffleArray([...englishQuestions, ...otherQuestions]);
 
-  // Avoid repeating the exact same overall question order on a retry.
+  // If a retry produces exactly the previous order, rotate the questions.
   if (
     previousQuestions.length === exam.length &&
     exam.length > 1 &&
-    exam.every((question, index) => question.id === previousQuestions[index].id)
+    exam.every((item, index) => item.id === previousQuestions[index].id)
   ) {
     exam = [...exam.slice(1), exam[0]];
   }
@@ -82,6 +81,8 @@ function createExamQuestions(
 }
 
 export default function PracticePage() {
+  const router = useRouter();
+
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
   const [current, setCurrent] = useState(0);
@@ -91,6 +92,14 @@ export default function PracticePage() {
   const [submitted, setSubmitted] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [setupError, setSetupError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Prevent duplicate result submissions.
+  const savingRef = useRef(false);
+  const savedRef = useRef(false);
+  const startedAtRef = useRef<number | null>(null);
 
   const optionalSubjects = availableSubjects.filter(
     (subject) => subject !== ENGLISH
@@ -109,24 +118,109 @@ export default function PracticePage() {
     .toString()
     .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
+  const finishExam = useCallback(async () => {
+    if (
+      !started ||
+      submitted ||
+      savingRef.current ||
+      savedRef.current ||
+      questions.length === 0
+    ) {
+      return;
+    }
+
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError("");
+
+    try {
+      const supabase = createClient();
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setSaveError(
+          "Your session could not be verified. Please log in again before saving your result."
+        );
+        return;
+      }
+
+      const finalScore = questions.reduce(
+        (total, item) =>
+          total + (answers[item.id] === item.answer ? 1 : 0),
+        0
+      );
+
+      const totalQuestions = questions.length;
+      const percentage = Number(
+        ((finalScore / totalQuestions) * 100).toFixed(2)
+      );
+
+      const elapsedSeconds =
+        startedAtRef.current === null
+          ? 0
+          : Math.max(
+              0,
+              Math.min(
+                EXAM_DURATION,
+                Math.floor((Date.now() - startedAtRef.current) / 1000)
+              )
+            );
+
+      const { error: insertError } = await supabase
+        .from("exam_results")
+        .insert({
+          user_id: user.id,
+          score: finalScore,
+          total_questions: totalQuestions,
+          percentage,
+          subjects: [ENGLISH, ...selectedSubjects],
+          time_taken_seconds: elapsedSeconds,
+        });
+
+      if (insertError) {
+        console.error("Failed to save exam result:", insertError);
+        setSaveError(
+          `Your result could not be saved. ${insertError.message}`
+        );
+        return;
+      }
+
+      savedRef.current = true;
+      setSaved(true);
+      setSubmitted(true);
+      setConfirmSubmit(false);
+    } catch (error) {
+      console.error("Unexpected error saving exam result:", error);
+      setSaveError(
+        "A network or unexpected error prevented your result from being saved. Please try again."
+      );
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }, [started, submitted, questions, answers, selectedSubjects]);
+
+  // Countdown timer.
   useEffect(() => {
-    if (!started || submitted) return;
+    if (!started || submitted || saved || seconds <= 0) return;
 
     const timer = window.setInterval(() => {
-      setSeconds((remaining) => {
-        if (remaining <= 1) {
-          window.clearInterval(timer);
-          setSubmitted(true);
-          setConfirmSubmit(false);
-          return 0;
-        }
-
-        return remaining - 1;
-      });
+      setSeconds((remaining) => Math.max(0, remaining - 1));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [started, submitted]);
+  }, [started, submitted, saved, seconds]);
+
+  // Automatically save and submit when the timer expires.
+  useEffect(() => {
+    if (started && !submitted && seconds === 0) {
+      void finishExam();
+    }
+  }, [started, submitted, seconds, finishExam]);
 
   function toggleSubject(subject: string) {
     setSetupError("");
@@ -151,16 +245,16 @@ export default function PracticePage() {
       return;
     }
 
-    const allSubjects = [ENGLISH, ...selectedSubjects];
+    const subjects = [ENGLISH, ...selectedSubjects];
 
-    const insufficientSubject = allSubjects.find((subject) => {
+    const insufficientSubject = subjects.find((subject) => {
       const required = subject === ENGLISH ? 20 : 10;
       return (questionBanks[subject] ?? []).length < required;
     });
 
     if (insufficientSubject) {
       setSetupError(
-        `${insufficientSubject} does not have enough questions yet. Please add the required questions to its question bank.`
+        `${insufficientSubject} does not have enough questions. Please add the required questions to its question bank.`
       );
       return;
     }
@@ -177,28 +271,48 @@ export default function PracticePage() {
     setSubmitted(false);
     setConfirmSubmit(false);
     setSetupError("");
-    setStarted(true);
-  }
+    setSaveError("");
+    setSaving(false);
+    setSaved(false);
 
-  function submitTest() {
-    setSubmitted(true);
-    setConfirmSubmit(false);
+    savingRef.current = false;
+    savedRef.current = false;
+    startedAtRef.current = Date.now();
+
+    setStarted(true);
   }
 
   function restartTest() {
     startExam(questions);
   }
 
+  function chooseDifferentSubjects() {
+    setStarted(false);
+    setSubmitted(false);
+    setSelectedSubjects([]);
+    setQuestions([]);
+    setAnswers({});
+    setCurrent(0);
+    setSeconds(EXAM_DURATION);
+    setSetupError("");
+    setSaveError("");
+    setSaving(false);
+    setSaved(false);
+    startedAtRef.current = null;
+    savingRef.current = false;
+    savedRef.current = false;
+  }
+
   if (!started) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900 sm:px-6">
         <div className="mx-auto max-w-3xl">
-          <a
-            href="/"
+          <Link
+            href="/dashboard"
             className="text-sm font-semibold text-blue-600 hover:underline"
           >
-            ← Back to homepage
-          </a>
+            ← Back to dashboard
+          </Link>
 
           <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
             <p className="text-sm font-bold uppercase tracking-widest text-blue-600">
@@ -210,8 +324,8 @@ export default function PracticePage() {
             </h1>
 
             <p className="mt-3 leading-7 text-slate-600">
-              Choose your subjects before starting. Use of English is
-              compulsory, and you must select three additional subjects.
+              Use of English is compulsory. Select three additional subjects
+              to complete your examination.
             </p>
 
             <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
@@ -221,9 +335,7 @@ export default function PracticePage() {
                   Compulsory
                 </span>
               </div>
-              <p className="mt-2 text-sm text-slate-600">
-                20 questions
-              </p>
+              <p className="mt-2 text-sm text-slate-600">20 questions</p>
             </div>
 
             <div className="mt-8">
@@ -266,10 +378,6 @@ export default function PracticePage() {
                   );
                 })}
               </div>
-
-              <p className="mt-4 text-sm text-slate-500">
-                Each selected subject contributes 10 questions.
-              </p>
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
@@ -317,13 +425,13 @@ export default function PracticePage() {
         (item) => item.subject === subject
       );
 
-      const subjectCorrect = subjectQuestions.filter(
+      const correct = subjectQuestions.filter(
         (item) => answers[item.id] === item.answer
       ).length;
 
       return {
         subject,
-        correct: subjectCorrect,
+        correct,
         total: subjectQuestions.length,
       };
     });
@@ -331,12 +439,12 @@ export default function PracticePage() {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900 sm:px-6">
         <div className="mx-auto max-w-3xl">
-          <a
-            href="/"
+          <Link
+            href="/dashboard"
             className="text-sm font-semibold text-blue-600 hover:underline"
           >
-            ← Back to homepage
-          </a>
+            ← Back to dashboard
+          </Link>
 
           <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-100 text-3xl">
@@ -346,11 +454,13 @@ export default function PracticePage() {
             <p className="mt-6 text-center text-sm font-bold uppercase tracking-widest text-blue-600">
               Test completed
             </p>
+
             <h1 className="mt-2 text-center text-3xl font-black sm:text-4xl">
               Your results
             </h1>
+
             <p className="mt-3 text-center text-slate-600">
-              Review your performance and keep practising.
+              Your examination result has been saved to your account.
             </p>
 
             <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-center">
@@ -363,8 +473,14 @@ export default function PracticePage() {
                 {answeredCount} of {questions.length} questions answered
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Time remaining: {formattedTime}
+                Time used: {Math.floor((EXAM_DURATION - seconds) / 60)} minutes
+                and {(EXAM_DURATION - seconds) % 60} seconds
               </p>
+              {saved && (
+                <p className="mt-3 text-sm font-semibold text-green-700">
+                  ✓ Result saved successfully
+                </p>
+              )}
             </div>
 
             <h2 className="mt-8 text-lg font-bold">Performance by subject</h2>
@@ -383,6 +499,7 @@ export default function PracticePage() {
             </div>
 
             <h2 className="mt-8 text-lg font-bold">Review your answers</h2>
+
             <div className="mt-4 space-y-4">
               {questions.map((item, index) => {
                 const selected = answers[item.id];
@@ -396,6 +513,7 @@ export default function PracticePage() {
                     <p className="text-xs font-bold uppercase tracking-wide text-blue-600">
                       {item.subject}
                     </p>
+
                     <p className="mt-2 font-semibold">
                       Question {index + 1}: {item.text}
                     </p>
@@ -443,20 +561,18 @@ export default function PracticePage() {
 
             <button
               type="button"
-              onClick={() => {
-                setStarted(false);
-                setSubmitted(false);
-                setSelectedSubjects([]);
-                setQuestions([]);
-                setAnswers({});
-                setCurrent(0);
-                setSeconds(EXAM_DURATION);
-                setSetupError("");
-              }}
+              onClick={chooseDifferentSubjects}
               className="mt-3 min-h-12 w-full rounded-xl border border-slate-300 px-5 py-3 font-semibold hover:bg-slate-50"
             >
               Choose different subjects
             </button>
+
+            <Link
+              href="/dashboard"
+              className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-blue-200 px-5 py-3 font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              Return to dashboard
+            </Link>
           </section>
         </div>
       </main>
@@ -466,10 +582,17 @@ export default function PracticePage() {
   if (!question) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
-        <p className="text-center text-slate-700">
-          No questions are available for this examination. Please check your
-          question banks.
-        </p>
+        <div className="text-center">
+          <p className="text-slate-700">
+            No questions are available for this examination.
+          </p>
+          <Link
+            href="/dashboard"
+            className="mt-4 inline-block font-semibold text-blue-600 hover:underline"
+          >
+            Return to dashboard
+          </Link>
+        </div>
       </main>
     );
   }
@@ -478,9 +601,9 @@ export default function PracticePage() {
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <a href="/" className="text-lg font-black">
+          <Link href="/dashboard" className="text-lg font-black">
             JAMB<span className="text-blue-600">Prep</span>
-          </a>
+          </Link>
 
           <div className="text-right">
             <p className="text-xs text-slate-500">TIME REMAINING</p>
@@ -513,9 +636,7 @@ export default function PracticePage() {
             <span className="font-semibold">
               Question {current + 1} of {questions.length}
             </span>
-            <span className="text-slate-500">
-              {answeredCount} answered
-            </span>
+            <span className="text-slate-500">{answeredCount} answered</span>
           </div>
 
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
@@ -657,6 +778,13 @@ export default function PracticePage() {
             >
               Submit test
             </button>
+
+            <Link
+              href="/dashboard"
+              className="mt-3 flex min-h-11 items-center justify-center rounded-xl text-sm font-semibold text-blue-600 hover:bg-blue-50"
+            >
+              Back to dashboard
+            </Link>
           </aside>
         </div>
       </div>
@@ -672,28 +800,60 @@ export default function PracticePage() {
             <h2 id="submit-title" className="text-xl font-black">
               Submit your examination?
             </h2>
+
             <p className="mt-3 text-sm leading-6 text-slate-600">
               You have answered {answeredCount} out of {questions.length}{" "}
               questions. Unanswered questions will count as incorrect.
             </p>
 
+            {saveError && (
+              <p
+                role="alert"
+                className="mt-4 rounded-lg bg-red-50 p-3 text-sm leading-6 text-red-700"
+              >
+                {saveError}
+              </p>
+            )}
+
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={() => setConfirmSubmit(false)}
-                className="min-h-12 flex-1 rounded-xl border border-slate-300 px-4 py-3 font-semibold"
+                disabled={saving}
+                onClick={() => {
+                  setConfirmSubmit(false);
+                  setSaveError("");
+                }}
+                className="min-h-12 flex-1 rounded-xl border border-slate-300 px-4 py-3 font-semibold disabled:opacity-50"
               >
                 Continue test
               </button>
+
               <button
                 type="button"
-                onClick={submitTest}
-                className="min-h-12 flex-1 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700"
+                disabled={saving}
+                onClick={() => void finishExam()}
+                className="min-h-12 flex-1 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               >
-                Confirm submit
+                {saving ? "Saving result..." : "Confirm and save"}
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {saveError && !confirmSubmit && (
+        <div className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-xl rounded-xl border border-red-200 bg-white p-4 shadow-lg">
+          <p role="alert" className="text-sm leading-6 text-red-700">
+            {saveError}
+          </p>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void finishExam()}
+            className="mt-3 min-h-10 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {saving ? "Saving..." : "Retry saving result"}
+          </button>
         </div>
       )}
     </main>

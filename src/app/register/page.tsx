@@ -40,7 +40,7 @@ export default function RegisterPage() {
       }
 
       if (data.session) {
-        router.replace("/practice");
+        router.replace("/dashboard");
         router.refresh();
       } else {
         setMessage(
