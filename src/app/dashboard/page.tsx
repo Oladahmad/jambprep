@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import InstallPWA from "@/components/InstallPWA";
 
 type ExamResult = {
   id: string;
@@ -18,6 +19,7 @@ type ExamResult = {
 
 export default function DashboardPage() {
   const router = useRouter();
+
   const [firstName, setFirstName] = useState("Student");
   const [results, setResults] = useState<ExamResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,10 @@ export default function DashboardPage() {
       } else {
         const storedFullName = user.user_metadata?.full_name;
 
-        if (typeof storedFullName === "string" && storedFullName.trim()) {
+        if (
+          typeof storedFullName === "string" &&
+          storedFullName.trim()
+        ) {
           setFirstName(storedFullName.trim().split(/\s+/)[0]);
         } else {
           setFirstName("Student");
@@ -107,13 +112,17 @@ export default function DashboardPage() {
 
   const averageScore =
     totalAttempts > 0
-      ? results.reduce((sum, result) => sum + Number(result.percentage), 0) /
-        totalAttempts
+      ? results.reduce(
+          (sum, result) => sum + Number(result.percentage),
+          0
+        ) / totalAttempts
       : 0;
 
   const bestScore =
     totalAttempts > 0
-      ? Math.max(...results.map((result) => Number(result.percentage)))
+      ? Math.max(
+          ...results.map((result) => Number(result.percentage))
+        )
       : 0;
 
   function formatDate(dateString: string) {
@@ -139,7 +148,10 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <Link href="/dashboard" className="text-xl font-black text-blue-600">
+          <Link
+            href="/dashboard"
+            className="text-xl font-black text-blue-600"
+          >
             JAMBPrep
           </Link>
 
@@ -165,16 +177,22 @@ export default function DashboardPage() {
           </h1>
 
           <p className="mt-3 max-w-2xl leading-7 text-blue-100">
-            Keep practising, review your performance, and work towards your
-            JAMB goals.
+            Keep practising, review your performance, and work towards
+            your JAMB goals.
           </p>
 
-          <Link
-            href="/practice"
-            className="mt-6 inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-5 py-3 font-bold text-blue-700 transition hover:bg-blue-50"
-          >
-            Start practice exam →
-          </Link>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Link
+              href="/practice"
+              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-5 py-3 font-bold text-blue-700 transition hover:bg-blue-50"
+            >
+              Start practice exam →
+            </Link>
+
+            <div className="[&_button]:border [&_button]:border-white/70 [&_button]:bg-blue-700 [&_button]:text-white [&_button]:shadow-none [&_button]:hover:bg-blue-800 [&_button]:focus:ring-white">
+              <InstallPWA />
+            </div>
+          </div>
         </section>
 
         {errorMessage && (
@@ -242,7 +260,9 @@ export default function DashboardPage() {
         <section className="mt-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-xl font-black">Recent practice exams</h2>
+              <h2 className="text-xl font-black">
+                Recent practice exams
+              </h2>
               <p className="mt-1 text-sm text-slate-600">
                 Review your latest results.
               </p>
@@ -263,7 +283,9 @@ export default function DashboardPage() {
               </p>
             ) : results.length === 0 ? (
               <div className="p-8 text-center">
-                <h3 className="text-lg font-bold">No exams completed yet</h3>
+                <h3 className="text-lg font-bold">
+                  No exams completed yet
+                </h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   Your completed practice exams and scores will appear here.
                 </p>

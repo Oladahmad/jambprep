@@ -20,7 +20,10 @@ type PracticeQuestion = {
 
 const LETTERS = ["A", "B", "C", "D"];
 const ENGLISH = "Use of English";
+const PYTHON = "Python";
 const EXAM_DURATION = 30 * 60;
+const PYTHON_DURATION = 10 * 60;
+type TestMode = "jamb" | "python";
 
 function shuffleArray<T>(items: T[]): T[] {
   const shuffled = [...items];
@@ -80,10 +83,30 @@ function createExamQuestions(
   return exam;
 }
 
+function createPythonQuestions(
+  previousQuestions: PracticeQuestion[] = []
+): PracticeQuestion[] {
+  let exam = shuffleArray(questionBanks[PYTHON] ?? [])
+    .slice(0, 20)
+    .map((question) => convertQuestion(question, PYTHON));
+
+  if (
+    previousQuestions.length === exam.length &&
+    exam.length > 1 &&
+    exam.every((item, index) => item.id === previousQuestions[index].id)
+  ) {
+    exam = [...exam.slice(1), exam[0]];
+  }
+
+  return exam;
+}
+
 export default function PracticePage() {
   const router = useRouter();
 
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [testMode, setTestMode] = useState<TestMode>("jamb");
+  const [examDuration, setExamDuration] = useState(EXAM_DURATION);
   const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -102,7 +125,7 @@ export default function PracticePage() {
   const startedAtRef = useRef<number | null>(null);
 
   const optionalSubjects = availableSubjects.filter(
-    (subject) => subject !== ENGLISH
+    (subject) => subject !== ENGLISH && subject !== PYTHON
   );
 
   const question = questions[current];
@@ -165,7 +188,7 @@ export default function PracticePage() {
           : Math.max(
               0,
               Math.min(
-                EXAM_DURATION,
+                examDuration,
                 Math.floor((Date.now() - startedAtRef.current) / 1000)
               )
             );
@@ -177,7 +200,7 @@ export default function PracticePage() {
           score: finalScore,
           total_questions: totalQuestions,
           percentage,
-          subjects: [ENGLISH, ...selectedSubjects],
+          subjects: testMode === "python" ? [PYTHON] : [ENGLISH, ...selectedSubjects],
           time_taken_seconds: elapsedSeconds,
         });
 
@@ -202,7 +225,7 @@ export default function PracticePage() {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [started, submitted, questions, answers, selectedSubjects]);
+  }, [started, submitted, questions, answers, selectedSubjects, testMode, examDuration]);
 
   // Countdown timer.
   useEffect(() => {
@@ -239,38 +262,59 @@ export default function PracticePage() {
     });
   }
 
-  function startExam(previousQuestions: PracticeQuestion[] = []) {
-    if (selectedSubjects.length !== 3) {
-      setSetupError("Please select exactly three additional subjects.");
-      return;
+  function startExam(
+    mode: TestMode = "jamb",
+    previousQuestions: PracticeQuestion[] = []
+  ) {
+    setSetupError("");
+
+    let examQuestions: PracticeQuestion[];
+    let duration: number;
+
+    if (mode === "python") {
+      const pythonBank = questionBanks[PYTHON] ?? [];
+
+      if (pythonBank.length < 20) {
+        setSetupError(
+          `The Python question bank currently has ${pythonBank.length} questions. Please add at least 20 Python questions before starting the test.`
+        );
+        return;
+      }
+
+      examQuestions = createPythonQuestions(previousQuestions);
+      duration = PYTHON_DURATION;
+    } else {
+      if (selectedSubjects.length !== 3) {
+        setSetupError("Please select exactly three additional subjects.");
+        return;
+      }
+
+      const subjects = [ENGLISH, ...selectedSubjects];
+
+      const insufficientSubject = subjects.find((subject) => {
+        const required = subject === ENGLISH ? 20 : 10;
+        return (questionBanks[subject] ?? []).length < required;
+      });
+
+      if (insufficientSubject) {
+        setSetupError(
+          `${insufficientSubject} does not have enough questions. Please add the required questions to its question bank.`
+        );
+        return;
+      }
+
+      examQuestions = createExamQuestions(selectedSubjects, previousQuestions);
+      duration = EXAM_DURATION;
     }
 
-    const subjects = [ENGLISH, ...selectedSubjects];
-
-    const insufficientSubject = subjects.find((subject) => {
-      const required = subject === ENGLISH ? 20 : 10;
-      return (questionBanks[subject] ?? []).length < required;
-    });
-
-    if (insufficientSubject) {
-      setSetupError(
-        `${insufficientSubject} does not have enough questions. Please add the required questions to its question bank.`
-      );
-      return;
-    }
-
-    const examQuestions = createExamQuestions(
-      selectedSubjects,
-      previousQuestions
-    );
-
+    setTestMode(mode);
+    setExamDuration(duration);
     setQuestions(examQuestions);
     setCurrent(0);
     setAnswers({});
-    setSeconds(EXAM_DURATION);
+    setSeconds(duration);
     setSubmitted(false);
     setConfirmSubmit(false);
-    setSetupError("");
     setSaveError("");
     setSaving(false);
     setSaved(false);
@@ -283,13 +327,15 @@ export default function PracticePage() {
   }
 
   function restartTest() {
-    startExam(questions);
+    startExam(testMode, questions);
   }
 
   function chooseDifferentSubjects() {
     setStarted(false);
     setSubmitted(false);
     setSelectedSubjects([]);
+    setTestMode("jamb");
+    setExamDuration(EXAM_DURATION);
     setQuestions([]);
     setAnswers({});
     setCurrent(0);
@@ -324,9 +370,17 @@ export default function PracticePage() {
             </h1>
 
             <p className="mt-3 leading-7 text-slate-600">
-              Use of English is compulsory. Select three additional subjects
-              to complete your examination.
+              Choose a standard JAMB practice examination or take the Python
+              test separately. Python has its own questions and timer.
             </p>
+
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <h2 className="text-xl font-black">Standard JAMB examination</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Use of English plus three additional subjects, with 50
+                questions and 30 minutes allowed.
+              </p>
+            </div>
 
             <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
               <div className="flex items-center justify-between gap-3">
@@ -399,15 +453,39 @@ export default function PracticePage() {
 
             <button
               type="button"
-              onClick={() => startExam()}
+              onClick={() => startExam("jamb")}
               className="mt-6 min-h-14 w-full rounded-xl bg-blue-600 px-5 py-4 font-bold text-white hover:bg-blue-700"
             >
-              Start examination →
+              Start JAMB examination →
             </button>
 
             <p className="mt-4 text-center text-xs leading-5 text-slate-500">
               Your 30-minute timer starts when you begin the examination.
             </p>
+
+            <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-slate-900">Python Test</h2>
+                    <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
+                      Standalone
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Answer all 20 Python questions in 10 minutes. No other
+                    subjects are required.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => startExam("python")}
+                  className="min-h-12 shrink-0 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700"
+                >
+                  Start Python test →
+                </button>
+              </div>
+            </div>
           </section>
         </div>
       </main>
@@ -420,7 +498,9 @@ export default function PracticePage() {
         ? Math.round((score / questions.length) * 100)
         : 0;
 
-    const subjectScores = [ENGLISH, ...selectedSubjects].map((subject) => {
+    const resultSubjects = testMode === "python" ? [PYTHON] : [ENGLISH, ...selectedSubjects];
+
+    const subjectScores = resultSubjects.map((subject) => {
       const subjectQuestions = questions.filter(
         (item) => item.subject === subject
       );
@@ -460,7 +540,7 @@ export default function PracticePage() {
             </h1>
 
             <p className="mt-3 text-center text-slate-600">
-              Your examination result has been saved to your account.
+              Your {testMode === "python" ? "Python test" : "JAMB practice examination"} result has been saved to your account.
             </p>
 
             <div className="mt-8 rounded-2xl bg-slate-50 p-6 text-center">
@@ -473,8 +553,8 @@ export default function PracticePage() {
                 {answeredCount} of {questions.length} questions answered
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Time used: {Math.floor((EXAM_DURATION - seconds) / 60)} minutes
-                and {(EXAM_DURATION - seconds) % 60} seconds
+                Time used: {Math.floor((examDuration - seconds) / 60)} minutes
+                and {(examDuration - seconds) % 60} seconds
               </p>
               {saved && (
                 <p className="mt-3 text-sm font-semibold text-green-700">
@@ -483,7 +563,9 @@ export default function PracticePage() {
               )}
             </div>
 
-            <h2 className="mt-8 text-lg font-bold">Performance by subject</h2>
+            <h2 className="mt-8 text-lg font-bold">
+              {testMode === "python" ? "Python performance" : "Performance by subject"}
+            </h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {subjectScores.map((item) => (
                 <div
@@ -621,35 +703,127 @@ export default function PracticePage() {
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="mb-6">
           <p className="text-sm font-semibold text-blue-600">
-            PRACTICE EXAMINATION
+            {testMode === "python" ? "PYTHON PRACTICE TEST" : "PRACTICE EXAMINATION"}
           </p>
           <h1 className="mt-2 text-2xl font-black sm:text-3xl">
-            JAMB Practice Test
+            {testMode === "python" ? "Python Test" : "JAMB Practice Test"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            {ENGLISH} + {selectedSubjects.join(", ")}
+            {testMode === "python"
+              ? "20 Python questions · 10 minutes"
+              : `${ENGLISH} + ${selectedSubjects.join(", ")}`}
           </p>
         </div>
 
         <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="font-semibold">
-              Question {current + 1} of {questions.length}
+              {testMode === "python"
+                ? `${answeredCount} of ${questions.length} questions answered`
+                : `Question ${current + 1} of ${questions.length}`}
             </span>
-            <span className="text-slate-500">{answeredCount} answered</span>
+            <span className="text-slate-500">
+              {testMode === "python"
+                ? `${questions.length - answeredCount} remaining`
+                : `${answeredCount} answered`}
+            </span>
           </div>
 
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-blue-600 transition-all"
               style={{
-                width: `${((current + 1) / questions.length) * 100}%`,
+                width: `${
+                  testMode === "python"
+                    ? (answeredCount / questions.length) * 100
+                    : ((current + 1) / questions.length) * 100
+                }%`,
               }}
             />
           </div>
         </div>
 
-        <div className="grid items-start gap-5 lg:grid-cols-[1fr_280px]">
+        {testMode === "python" ? (
+          <section className="space-y-5">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="font-bold text-emerald-900">
+                Python test: all 20 questions
+              </p>
+              <p className="mt-1 text-sm text-emerald-800">
+                Answer each question below. Your test will submit automatically
+                when the 10-minute timer reaches zero.
+              </p>
+            </div>
+
+            {questions.map((item, index) => (
+              <article
+                key={item.id}
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"
+              >
+                <p className="text-sm font-semibold text-blue-600">
+                  PYTHON · QUESTION {index + 1} OF {questions.length}
+                </p>
+
+                {item.topic && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Topic: {item.topic}
+                  </p>
+                )}
+
+                <h2 className="mt-4 text-lg font-bold leading-8 sm:text-xl">
+                  {item.text}
+                </h2>
+
+                <div className="mt-5 space-y-3">
+                  {item.options.map((option, optionIndex) => {
+                    const selected = answers[item.id] === optionIndex;
+
+                    return (
+                      <button
+                        key={`${item.id}-${optionIndex}`}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() =>
+                          setAnswers((previous) => ({
+                            ...previous,
+                            [item.id]: optionIndex,
+                          }))
+                        }
+                        className={`flex min-h-12 w-full items-start gap-3 rounded-xl border p-3 text-left transition sm:p-4 ${
+                          selected
+                            ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600"
+                            : "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                            selected
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {LETTERS[optionIndex]}
+                        </span>
+                        <span className="pt-1 text-sm leading-6 sm:text-base">
+                          {option}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </article>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setConfirmSubmit(true)}
+              className="min-h-14 w-full rounded-xl bg-emerald-600 px-5 py-4 font-bold text-white hover:bg-emerald-700"
+            >
+              Submit Python test
+            </button>
+          </section>
+        ) : (
+          <div className="grid items-start gap-5 lg:grid-cols-[1fr_280px]">
           <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
             <p className="text-sm font-semibold text-blue-600">
               {question.subject.toUpperCase()} · QUESTION {current + 1}
@@ -787,6 +961,7 @@ export default function PracticePage() {
             </Link>
           </aside>
         </div>
+        )}
       </div>
 
       {confirmSubmit && (

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import InstallPWA from "@/components/InstallPWA";
 
 const features = [
   {
@@ -41,7 +42,9 @@ export default function Home() {
       const { data } = await supabase.auth.getUser();
 
       if (data.user) {
-        const metadataName = data.user.user_metadata?.full_name;
+        const metadataName =
+          data.user.user_metadata?.first_name ??
+          data.user.user_metadata?.full_name;
 
         setUserName(
           typeof metadataName === "string" && metadataName.trim()
@@ -61,7 +64,9 @@ export default function Home() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user;
-      const metadataName = user?.user_metadata?.full_name;
+      const metadataName =
+        user?.user_metadata?.first_name ??
+        user?.user_metadata?.full_name;
 
       setUserName(
         user
@@ -186,7 +191,7 @@ export default function Home() {
             </p>
           )}
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <Link
               href="/practice"
               className="flex min-h-14 items-center justify-center rounded-xl bg-blue-600 px-6 py-4 font-bold text-white shadow-sm transition hover:bg-blue-700"
@@ -202,6 +207,8 @@ export default function Home() {
                 Create free account
               </Link>
             )}
+
+            <InstallPWA />
           </div>
 
           <p className="mt-5 text-sm text-slate-500">
@@ -347,9 +354,7 @@ export default function Home() {
       </section>
 
       <footer className="bg-slate-950 px-4 py-7 text-center text-sm text-slate-400">
-        <p>
-          © 2026 JAMBPrep Assessment.
-        </p>
+        <p>© 2026 JAMBPrep Assessment.</p>
         <p className="mt-1">Built for better preparation.</p>
       </footer>
     </main>
