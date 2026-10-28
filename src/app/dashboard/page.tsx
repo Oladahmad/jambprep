@@ -16,25 +16,19 @@ type ExamResult = {
   created_at: string;
 };
 
-type DisplayResult = ExamResult & {
-  displayDate: string;
-};
-
-export default function StudentDashboard() {
+export default function DashboardPage() {
   const router = useRouter();
-
-  const [name, setName] = useState("Student");
-  const [email, setEmail] = useState("");
-  const [results, setResults] = useState<DisplayResult[]>([]);
+  const [firstName, setFirstName] = useState("Student");
+  const [results, setResults] = useState<ExamResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
   const [signingOut, setSigningOut] = useState(false);
-  const [error, setError] = useState("");
 
   const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
     const supabase = createClient();
+
+    setLoading(true);
+    setErrorMessage("");
 
     try {
       const {
@@ -47,50 +41,43 @@ export default function StudentDashboard() {
         return;
       }
 
-      const metadataName = user.user_metadata?.full_name;
+      const storedFirstName = user.user_metadata?.first_name;
 
-const firstName =
-  typeof metadataName === "string" && metadataName.trim()
-    ? metadataName.trim().split(/\s+/)[0]
-    : "Student";
+      if (
+        typeof storedFirstName === "string" &&
+        storedFirstName.trim()
+      ) {
+        setFirstName(storedFirstName.trim());
+      } else {
+        const storedFullName = user.user_metadata?.full_name;
 
-      setName(
-        typeof metadataName === "string" && metadataName.trim()
-          ? metadataName.trim()
-          : "Student"
-      );
+        if (typeof storedFullName === "string" && storedFullName.trim()) {
+          setFirstName(storedFullName.trim().split(/\s+/)[0]);
+        } else {
+          setFirstName("Student");
+        }
+      }
 
-      const { data, error: resultsError } = await supabase
+      const { data, error } = await supabase
         .from("exam_results")
         .select(
           "id, score, total_questions, percentage, subjects, time_taken_seconds, created_at"
         )
         .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(50);
+        .order("created_at", { ascending: false });
 
-      if (resultsError) {
-        setError(
-          "We couldn't load your examination history. Check that the exam_results table and its policies have been created in Supabase."
+      if (error) {
+        setErrorMessage(
+          "We couldn't load your exam results. Please refresh the page and try again."
         );
-        setResults([]);
         return;
       }
 
-      const formattedResults: DisplayResult[] = (data ?? []).map(
-        (result) => ({
-          ...result,
-          percentage: Number(result.percentage),
-          displayDate: new Date(result.created_at).toLocaleString(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          }),
-        })
-      );
-
-      setResults(formattedResults);
+      setResults((data ?? []) as ExamResult[]);
     } catch {
-      setError("Something went wrong while loading your dashboard.");
+      setErrorMessage(
+        "Something went wrong while loading your dashboard. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -102,13 +89,12 @@ const firstName =
 
   async function handleSignOut() {
     setSigningOut(true);
-    setError("");
 
     const supabase = createClient();
-    const { error: signOutError } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
 
-    if (signOutError) {
-      setError("Unable to sign out. Please try again.");
+    if (error) {
+      setErrorMessage("Unable to log out right now. Please try again.");
       setSigningOut(false);
       return;
     }
@@ -121,194 +107,218 @@ const firstName =
 
   const averageScore =
     totalAttempts > 0
-      ? Math.round(
-          results.reduce((total, result) => total + result.percentage, 0) /
-            totalAttempts
-        )
+      ? results.reduce((sum, result) => sum + Number(result.percentage), 0) /
+        totalAttempts
       : 0;
 
   const bestScore =
     totalAttempts > 0
-      ? Math.max(...results.map((result) => result.percentage))
+      ? Math.max(...results.map((result) => Number(result.percentage)))
       : 0;
+
+  function formatDate(dateString: string) {
+    return new Date(dateString).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function formatDuration(seconds: number | null) {
+    if (seconds === null || seconds === undefined) {
+      return "Not recorded";
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    return `${minutes}m ${remainingSeconds}s`;
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <Link href="/" className="text-xl font-black">
-            JAMB<span className="text-blue-600">Prep</span>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <Link href="/dashboard" className="text-xl font-black text-blue-600">
+            JAMBPrep
           </Link>
 
           <button
             type="button"
             onClick={handleSignOut}
             disabled={signingOut}
-            className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold transition hover:bg-slate-100 disabled:opacity-60"
           >
-            {signingOut ? "Signing out..." : "Log out"}
+            {signingOut ? "Logging out..." : "Log out"}
           </button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-        <section className="rounded-3xl bg-blue-700 p-6 text-white shadow-sm sm:p-8">
-          <p className="text-sm font-semibold uppercase tracking-widest text-blue-100">
-            Student dashboard
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="rounded-3xl bg-blue-600 p-6 text-white sm:p-8">
+          <p className="text-sm font-semibold text-blue-100">
+            YOUR LEARNING SPACE
           </p>
 
-          <h1 className="mt-3 break-words text-3xl font-black sm:text-4xl">
-            Welcome, {name}!
+          <h1 className="mt-2 text-3xl font-black sm:text-4xl">
+            Welcome back, {firstName}!
           </h1>
 
-          <p className="mt-3 break-all text-sm text-blue-100">
-            {email}
-          </p>
-
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-blue-50 sm:text-base">
-            Keep practising, learn from your mistakes and track your
-            examination performance as you prepare for JAMB.
+          <p className="mt-3 max-w-2xl leading-7 text-blue-100">
+            Keep practising, review your performance, and work towards your
+            JAMB goals.
           </p>
 
           <Link
             href="/practice"
             className="mt-6 inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-5 py-3 font-bold text-blue-700 transition hover:bg-blue-50"
           >
-            Start a practice examination →
+            Start practice exam →
           </Link>
         </section>
 
-        <section className="mt-8">
-          <h2 className="text-xl font-black">Your performance</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            A summary of your saved examination results.
-          </p>
-
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Completed attempts
-              </p>
-              <p className="mt-3 text-3xl font-black text-blue-700">
-                {loading ? "..." : totalAttempts}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Average score
-              </p>
-              <p className="mt-3 text-3xl font-black text-blue-700">
-                {loading ? "..." : `${averageScore}%`}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-sm font-medium text-slate-500">
-                Best score
-              </p>
-              <p className="mt-3 text-3xl font-black text-blue-700">
-                {loading ? "..." : `${Math.round(bestScore)}%`}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 sm:p-7">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div>
-              <h2 className="text-xl font-black">Examination history</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Your most recent saved results.
-              </p>
-            </div>
+        {errorMessage && (
+          <div
+            role="alert"
+            className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
+            <p>{errorMessage}</p>
 
             <button
               type="button"
               onClick={() => void loadDashboard()}
-              disabled={loading}
-              className="min-h-10 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
+              className="mt-2 font-bold underline"
             >
-              Refresh results
+              Try again
             </button>
           </div>
+        )}
 
-          {error && (
-            <div
-              role="alert"
-              className="mt-5 rounded-xl bg-red-50 p-4 text-sm leading-6 text-red-700"
-            >
-              {error}
-            </div>
-          )}
+        <section className="mt-8">
+          <h2 className="text-xl font-black">Your performance</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Track your progress across completed practice exams.
+          </p>
 
-          {loading ? (
-            <p className="mt-6 text-sm text-slate-500">
-              Loading your dashboard...
-            </p>
-          ) : results.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center sm:p-8">
-              <span className="text-4xl" aria-hidden="true">
-                📚
-              </span>
-
-              <h3 className="mt-3 text-lg font-bold">
-                Your journey starts here
-              </h3>
-
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
-                You don't have any saved examination results yet. Complete
-                a practice test to start building your performance history.
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-medium text-slate-500">
+                Total attempts
               </p>
-
-              <Link
-                href="/practice"
-                className="mt-5 inline-flex min-h-12 items-center justify-center rounded-xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700"
-              >
-                Take your first test
-              </Link>
+              <p className="mt-3 text-3xl font-black">
+                {loading ? "—" : totalAttempts}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Exams completed
+              </p>
             </div>
-          ) : (
-            <div className="mt-5 space-y-4">
-              {results.map((result) => (
-                <article
-                  key={result.id}
-                  className="rounded-xl border border-slate-200 p-4 sm:p-5"
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-medium text-slate-500">
+                Average score
+              </p>
+              <p className="mt-3 text-3xl font-black">
+                {loading ? "—" : `${averageScore.toFixed(1)}%`}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Across your attempts
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-medium text-slate-500">
+                Best score
+              </p>
+              <p className="mt-3 text-3xl font-black">
+                {loading ? "—" : `${bestScore.toFixed(1)}%`}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Your highest percentage
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black">Recent practice exams</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Review your latest results.
+              </p>
+            </div>
+
+            <Link
+              href="/practice"
+              className="font-bold text-blue-600 hover:underline"
+            >
+              Practise again →
+            </Link>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {loading ? (
+              <p className="p-6 text-sm text-slate-500">
+                Loading your results...
+              </p>
+            ) : results.length === 0 ? (
+              <div className="p-8 text-center">
+                <h3 className="text-lg font-bold">No exams completed yet</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Your completed practice exams and scores will appear here.
+                </p>
+                <Link
+                  href="/practice"
+                  className="mt-5 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 py-3 font-bold text-white hover:bg-blue-700"
                 >
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                    <div>
-                      <p className="font-bold">
-                        Practice examination
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {result.displayDate}
-                      </p>
-                    </div>
+                  Take your first exam
+                </Link>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {results.slice(0, 10).map((result) => (
+                  <article key={result.id} className="p-5 sm:p-6">
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                      <div className="min-w-0">
+                        <p className="font-bold">
+                          {formatDate(result.created_at)}
+                        </p>
 
-                    <div className="sm:text-right">
-                      <p className="text-2xl font-black text-blue-700">
-                        {result.percentage}%
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {result.score}/{result.total_questions} correct
-                      </p>
-                    </div>
-                  </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {result.score} out of {result.total_questions} correct
+                        </p>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {result.subjects.map((subject) => (
-                      <span
-                        key={subject}
-                        className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700"
-                      >
-                        {subject}
-                      </span>
-                    ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+                        <p className="mt-2 text-xs text-slate-500">
+                          Time taken:{" "}
+                          {formatDuration(result.time_taken_seconds)}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(result.subjects ?? []).map((subject) => (
+                            <span
+                              key={subject}
+                              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+                            >
+                              {subject}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 sm:text-right">
+                        <p className="text-2xl font-black text-blue-600">
+                          {Number(result.percentage).toFixed(1)}%
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Exam score
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </main>
