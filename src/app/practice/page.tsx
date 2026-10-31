@@ -22,7 +22,7 @@ const LETTERS = ["A", "B", "C", "D"];
 const ENGLISH = "Use of English";
 const PYTHON = "Python";
 const EXAM_DURATION = 30 * 60;
-const PYTHON_DURATION = 10 * 60;
+const PYTHON_DURATION = 20 * 60;
 type TestMode = "jamb" | "python";
 
 function shuffleArray<T>(items: T[]): T[] {
