@@ -87,7 +87,7 @@ function createPythonQuestions(
   previousQuestions: PracticeQuestion[] = []
 ): PracticeQuestion[] {
   let exam = shuffleArray(questionBanks[PYTHON] ?? [])
-    .slice(0, 20)
+    .slice(0, 50)
     .map((question) => convertQuestion(question, PYTHON));
 
   if (
