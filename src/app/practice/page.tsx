@@ -22,7 +22,7 @@ const LETTERS = ["A", "B", "C", "D"];
 const ENGLISH = "Use of English";
 const PYTHON = "Python";
 const EXAM_DURATION = 30 * 60;
-const PYTHON_DURATION = 20 * 60;
+const PYTHON_DURATION = 30 * 60;
 type TestMode = "jamb" | "python";
 
 function shuffleArray<T>(items: T[]): T[] {
@@ -274,9 +274,9 @@ export default function PracticePage() {
     if (mode === "python") {
       const pythonBank = questionBanks[PYTHON] ?? [];
 
-      if (pythonBank.length < 20) {
+      if (pythonBank.length < 50) {
         setSetupError(
-          `The Python question bank currently has ${pythonBank.length} questions. Please add at least 20 Python questions before starting the test.`
+          `The Python question bank currently has ${pythonBank.length} questions. Please add at least 50 Python questions before starting the test.`
         );
         return;
       }
@@ -473,7 +473,7 @@ export default function PracticePage() {
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-slate-600">
-                    Answer all 20 Python questions in 10 minutes. No other
+                    Answer all 50 Python questions in 30 minutes. No other
                     subjects are required.
                   </p>
                 </div>
@@ -710,7 +710,7 @@ export default function PracticePage() {
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             {testMode === "python"
-              ? "20 Python questions · 10 minutes"
+              ? "50 Python questions · 30 minutes"
               : `${ENGLISH} + ${selectedSubjects.join(", ")}`}
           </p>
         </div>
@@ -747,11 +747,11 @@ export default function PracticePage() {
           <section className="space-y-5">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <p className="font-bold text-emerald-900">
-                Python test: all 20 questions
+                Python test: all 50 questions
               </p>
               <p className="mt-1 text-sm text-emerald-800">
                 Answer each question below. Your test will submit automatically
-                when the 10-minute timer reaches zero.
+                when the 30-minute timer reaches zero.
               </p>
             </div>
 
