@@ -238,12 +238,12 @@ export default function Home() {
             </p>
 
             <h3 className="mt-2 text-xl font-black">
-              50 questions. 30 minutes.
+              Your subject. Your pace.
             </h3>
 
             <p className="mt-3 text-sm leading-7 text-slate-600">
-              Choose Use of English and three additional subjects, answer
-              the questions and review your results at the end.
+              Choose any available subject, set your question count in
+              groups of 10, then complete your timed practice test.
             </p>
 
             <Link
