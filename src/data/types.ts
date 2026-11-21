@@ -1,6 +1,6 @@
 
 export type QuestionOption = {
-  label: "A" | "B" | "C" | "D";
+  label: "A" | "B" | "C" | "D" | "E";
   text: string;
 };
 
@@ -10,6 +10,6 @@ export type Question = {
   topic: string;
   question: string;
   options: QuestionOption[];
-  correctAnswer: "A" | "B" | "C" | "D";
+  correctAnswer: "A" | "B" | "C" | "D" | "E";
   explanation: string;
 };

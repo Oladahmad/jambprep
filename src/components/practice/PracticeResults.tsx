@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { PracticeQuestion } from "@/lib/practice";
 
-const LETTERS = ["A", "B", "C", "D"];
+const LETTERS = ["A", "B", "C", "D", "E"];
 
 type PracticeResultsProps = {
   questions: PracticeQuestion[];
